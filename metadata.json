@@ -1,0 +1,6 @@
+{
+  "name": "Desi Meme Keyboard",
+  "description": "An interactive emoji meme dialogue keyboard with fun, localized Bollywood/Desi audio dialogues, mood-based vibrations, custom editing, and sharing features.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
