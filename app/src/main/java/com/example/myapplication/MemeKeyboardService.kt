@@ -1,11 +1,12 @@
+
 package com.example.myapplication
 
 import android.inputmethodservice.InputMethodService
 import android.inputmethodservice.Keyboard
 import android.inputmethodservice.KeyboardView
 import android.view.View
-import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import android.view.inputmethod.EditorInfo
 import android.widget.LinearLayout
 import android.widget.Button
 import android.content.Context
@@ -18,7 +19,7 @@ class MemeKeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionL
     override fun onCreateInputView(): View {
         return MemeKeyboardView(this).apply {
             keyboardView = this
-            setOnEmojiClickListener { emoji, dialogue ->
+            setOnEmojiClickListener { emoji: String, dialogue: String ->
                 insertText(emoji, dialogue)
             }
         }
@@ -31,9 +32,7 @@ class MemeKeyboardService : InputMethodService(), KeyboardView.OnKeyboardActionL
 
     private fun insertText(emoji: String, dialogue: String) {
         inputConnection?.let { conn ->
-            // Insert emoji first
             conn.commitText(emoji, 1)
-            // Then insert the meme dialogue
             conn.commitText(" $dialogue", 1)
         }
     }
