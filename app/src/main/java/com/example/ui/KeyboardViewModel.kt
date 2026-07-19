@@ -29,6 +29,9 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
     private var tts: TextToSpeech? = null
     private var isTtsInitialized = false
 
+    // 👉 YEH NAYA BRIDGE HAI: Keyboard mein type karne ke liye
+    var onCommitText: ((String) -> Unit)? = null
+
     // Input text in the meme message board
     private val _typedText = MutableStateFlow("")
     val typedText: StateFlow<String> = _typedText.asStateFlow()
@@ -161,6 +164,9 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
         }
         _typedText.value = _typedText.value + textToInsert
 
+        // 👉 YEH NAYA CODE HAI: Direct chat box mein type karne ke liye
+        onCommitText?.invoke(textToInsert)
+
         // Fire a visual dialogue overlay/popup
         _activeDialogueEvent.value = item
     }
@@ -198,32 +204,26 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
 
         when (mood) {
             "FUNNY" -> {
-                // Bouncy energetic bursts
                 timings = longArrayOf(0, (60 * multiplier).toLong(), 40, (60 * multiplier).toLong(), 40, (80 * multiplier).toLong())
                 amplitudes = intArrayOf(0, 150, 0, 200, 0, 255)
             }
             "SWAG" -> {
-                // Heavy, steady pulses
                 timings = longArrayOf(0, (180 * multiplier).toLong(), 100, (180 * multiplier).toLong())
                 amplitudes = intArrayOf(0, 255, 0, 255)
             }
             "SAD" -> {
-                // Fading long wave
                 timings = longArrayOf(0, (400 * multiplier).toLong())
                 amplitudes = intArrayOf(0, 100)
             }
             "SHOCK" -> {
-                // High frequency double kick
                 timings = longArrayOf(0, (120 * multiplier).toLong(), 80, (250 * multiplier).toLong())
                 amplitudes = intArrayOf(0, 255, 0, 255)
             }
             "LOVE" -> {
-                // Heartbeat repeat
                 timings = longArrayOf(0, (80 * multiplier).toLong(), 80, (80 * multiplier).toLong(), 300, (80 * multiplier).toLong(), 80, (80 * multiplier).toLong())
                 amplitudes = intArrayOf(0, 100, 0, 120, 0, 100, 0, 120)
             }
             "ANGRY" -> {
-                // Harsh high power rumble
                 timings = longArrayOf(0, (350 * multiplier).toLong(), 40, (350 * multiplier).toLong())
                 amplitudes = intArrayOf(0, 255, 0, 255)
             }
