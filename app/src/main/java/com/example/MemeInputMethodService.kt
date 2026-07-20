@@ -22,6 +22,10 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import android.widget.Toast
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
@@ -358,7 +362,7 @@ fun SystemKeyboardView(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            listOf("⌨️ Keys", "😂 Memes", "📜 Shayari", "✨ AI Writer", "🎨 Custom").forEach { tab ->
+            listOf("⌨️ Keys", "😂 Memes", "📜 Shayari", "🔥 Trending", "✨ AI Writer", "🎨 Custom").forEach { tab ->
                 val isSelected = activeTab == tab
                 Box(
                     modifier = Modifier
@@ -420,6 +424,16 @@ fun SystemKeyboardView(
                             onDone()
                             onVibrate("LIGHT")
                         }
+                    )
+                }
+                "🔥 Trending" -> {
+                    SystemKeyboardTrendingSection(
+                        repository = repository,
+                        onCommitText = onCommitText,
+                        onSpeak = onSpeak,
+                        onVibrate = onVibrate,
+                        sharedPrefs = sharedPrefs,
+                        serviceScope = serviceScope
                     )
                 }
                 "😂 Memes" -> {
@@ -1159,3 +1173,288 @@ private suspend fun executeGeminiCall(prompt: String): String = withContext(Disp
         "Error: ${e.message}"
     }
 }
+
+@Composable
+fun SystemKeyboardTrendingSection(
+    repository: MemeRepository,
+    onCommitText: (String) -> Unit,
+    onSpeak: (String) -> Unit,
+    onVibrate: (String) -> Unit,
+    sharedPrefs: SharedPreferences,
+    serviceScope: CoroutineScope
+) {
+    val calendar = java.util.Calendar.getInstance()
+    val day = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+    
+    val pool = listOf(
+        MemeDialogue(emoji = "🍆", dialogue = "Aayein? Baigan!", category = "😂 Hasna", mood = "FUNNY"),
+        MemeDialogue(emoji = "✨", dialogue = "So beautiful, so elegant, just looking like a wow!", category = "😎 Swag", mood = "SWAG"),
+        MemeDialogue(emoji = "😭", dialogue = "Moye Moye! Ekdum se waqt badal diya, jazbaat badal diye!", category = "😭 Dukh", mood = "SAD"),
+        MemeDialogue(emoji = "🤝", dialogue = "Melodi hai ki chalti nahi, par dosti gehri hai!", category = "🤝 Dosti", mood = "LOVE"),
+        MemeDialogue(emoji = "🤬", dialogue = "Arrey chacha, o bhosadi wale chacha, shant ho jao!", category = "😡 Gussa", mood = "ANGRY"),
+        MemeDialogue(emoji = "💀", dialogue = "Chin tapak dam dam! Sab khatam ho gaya re baba!", category = "😱 Shock", mood = "SHOCK"),
+        MemeDialogue(emoji = "💻", dialogue = "Systumm pe systumm bitha rakha hai bhai ne!", category = "😎 Swag", mood = "SWAG"),
+        MemeDialogue(emoji = "💪", dialogue = "Pawan Sahu banega tu? Gym ja ke dumble utha!", category = "😂 Hasna", mood = "FUNNY"),
+        MemeDialogue(emoji = "🥺", dialogue = "Sahi pakde hain, par dil se bura lagta hai bhai!", category = "😭 Dukh", mood = "SAD"),
+        MemeDialogue(emoji = "🗺️", dialogue = "Bhupendra Jogi! US mein kahan kahan gaye hain aap?", category = "😎 Swag", mood = "SWAG"),
+        MemeDialogue(emoji = "🦁", dialogue = "Sher ko kaboo karne ke liye jigar chahiye, dimaag nahi!", category = "😎 Swag", mood = "SWAG"),
+        MemeDialogue(emoji = "💔", dialogue = "Toba toba, saara mood kharab kar diya!", category = "😡 Gussa", mood = "ANGRY")
+    )
+    
+    val startIndex = day % pool.size
+    val dailyTrends = remember {
+        val resultList = mutableListOf<MemeDialogue>()
+        for (i in 0 until 6) {
+            val idx = (startIndex + i) % pool.size
+            resultList.add(pool[idx])
+        }
+        resultList
+    }
+
+    var trendingMemes by remember { mutableStateOf<List<MemeDialogue>>(dailyTrends) }
+    var isApiLoading by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "🔥 TODAY'S DESI TRENDS",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    color = KeyboardPink
+                )
+                Text(
+                    text = "Insert, speak, or save to keyboard",
+                    fontSize = 8.sp,
+                    color = Color.Gray
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (isApiLoading) Color.DarkGray else KeyboardPurple)
+                    .clickable(enabled = !isApiLoading) {
+                        isApiLoading = true
+                        serviceScope.launch(Dispatchers.IO) {
+                            val apiKey = com.example.BuildConfig.GEMINI_API_KEY
+                            if (apiKey.isNotEmpty() && apiKey != "MY_GEMINI_API_KEY") {
+                                val client = okhttp3.OkHttpClient.Builder()
+                                    .connectTimeout(25, java.util.concurrent.TimeUnit.SECONDS)
+                                    .build()
+                                    
+                                val prompt = "Find and summarize the top 6 absolute most popular viral Desi/Hindi/Hinglish meme dialogues, social media trends, movie dialogue catchphrases, or slang phrases currently trending in India right now in 2026. " +
+                                             "For each trending meme, specify a suitable single emoji, the dialogue text (in Hinglish, i.e., Roman script, like 'Moye Moye' or 'Just looking like a wow'), a category (choose exactly from: '😂 Hasna', '😎 Swag', '😭 Dukh', '😱 Shock', '❤️ Pyaar', '😡 Gussa', '🤝 Dosti'), and the mood (choose exactly from: 'FUNNY', 'SWAG', 'SAD', 'SHOCK', 'LOVE', 'ANGRY'). " +
+                                             "Format the output strictly as a JSON array of objects. Do not include any other text, markdown blocks, or translations. " +
+                                             "Example: [ { \"emoji\": \"😭\", \"dialogue\": \"Yeh dukh kaahe khatam nahi hota be\", \"category\": \"😭 Dukh\", \"mood\": \"SAD\" } ]"
+
+                                val jsonBody = org.json.JSONObject().apply {
+                                    put("contents", org.json.JSONArray().apply {
+                                        put(org.json.JSONObject().apply {
+                                            put("parts", org.json.JSONArray().apply {
+                                                put(org.json.JSONObject().apply {
+                                                    put("text", prompt)
+                                                })
+                                            })
+                                        })
+                                    })
+                                    put("tools", org.json.JSONArray().apply {
+                                        put(org.json.JSONObject().apply {
+                                            put("googleSearchRetrieval", org.json.JSONObject())
+                                        })
+                                    })
+                                    put("generationConfig", org.json.JSONObject().apply {
+                                        put("responseMimeType", "application/json")
+                                        put("temperature", 0.4)
+                                    })
+                                }
+                                
+                                val mediaType = "application/json; charset=utf-8".toMediaType()
+                                val requestBody = jsonBody.toString().toRequestBody(mediaType)
+                                val request = okhttp3.Request.Builder()
+                                    .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey")
+                                    .post(requestBody)
+                                    .build()
+                                    
+                                try {
+                                    client.newCall(request).execute().use { response ->
+                                        if (response.isSuccessful) {
+                                            val body = response.body?.string() ?: ""
+                                            val jsonResponse = org.json.JSONObject(body)
+                                            val candidates = jsonResponse.optJSONArray("candidates")
+                                            if (candidates != null && candidates.length() > 0) {
+                                                val content = candidates.getJSONObject(0).optJSONObject("content")
+                                                val parts = content?.optJSONArray("parts")
+                                                val resultText = parts?.getJSONObject(0)?.optString("text", "") ?: ""
+                                                
+                                                var cleanedJson = resultText.trim()
+                                                if (cleanedJson.startsWith("```json")) {
+                                                    cleanedJson = cleanedJson.removePrefix("```json").trim()
+                                                }
+                                                if (cleanedJson.endsWith("```")) {
+                                                    cleanedJson = cleanedJson.removeSuffix("```").trim()
+                                                }
+                                                
+                                                val jsonArray = org.json.JSONArray(cleanedJson)
+                                                val parsedList = mutableListOf<MemeDialogue>()
+                                                for (i in 0 until jsonArray.length()) {
+                                                    val obj = jsonArray.getJSONObject(i)
+                                                    parsedList.add(
+                                                        MemeDialogue(
+                                                            id = 0,
+                                                            emoji = obj.optString("emoji", "🔥"),
+                                                            dialogue = obj.optString("dialogue", ""),
+                                                            category = obj.optString("category", "😂 Hasna"),
+                                                            mood = obj.optString("mood", "FUNNY"),
+                                                            isCustom = true
+                                                        )
+                                                    )
+                                                }
+                                                if (parsedList.isNotEmpty()) {
+                                                    withContext(Dispatchers.Main) {
+                                                        trendingMemes = parsedList
+                                                        Toast.makeText(context, "Trends updated live! ⚡", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            }
+                            withContext(Dispatchers.Main) {
+                                isApiLoading = false
+                            }
+                        }
+                    }
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = if (isApiLoading) "Updating..." else "Live ⚡",
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(1),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(trendingMemes) { item: MemeDialogue ->
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, Color(0xFF222225), RoundedCornerShape(8.dp)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF141416)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(30.dp)
+                                .background(KeyboardPurple.copy(alpha = 0.2f), CircleShape)
+                                .border(1.dp, KeyboardPurple.copy(alpha = 0.4f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(item.emoji, fontSize = 14.sp)
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = item.dialogue,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = KeyboardWhite,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(item.category, fontSize = 7.sp, color = KeyboardPink)
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            IconButton(
+                                onClick = {
+                                    onSpeak(item.dialogue)
+                                    onVibrate(item.mood)
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PlayArrow,
+                                    contentDescription = "Speak",
+                                    tint = KeyboardGreen,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    onSpeak(item.dialogue)
+                                    onVibrate(item.mood)
+                                    val insertModeVal = sharedPrefs.getString("insert_mode", "DIALOGUE") ?: "DIALOGUE"
+                                    val textToInsert = if (insertModeVal == "DIALOGUE") {
+                                        "${item.emoji} ${item.dialogue} "
+                                    } else {
+                                        "${item.emoji} "
+                                    }
+                                    onCommitText(textToInsert)
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Use",
+                                    tint = KeyboardYellow,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+
+                            IconButton(
+                                onClick = {
+                                    serviceScope.launch {
+                                        repository.insert(item.copy(id = 0, isCustom = true))
+                                        Toast.makeText(context, "Saved to Memes Tab! 📥", Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "Save",
+                                    tint = Color.Cyan,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

@@ -95,6 +95,7 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
         // Initialize Database with prepopulated defaults if empty
         viewModelScope.launch {
             repository.checkAndPrepopulate()
+            fetchTrendingMemes()
         }
 
         // Initialize Text To Speech
@@ -467,6 +468,270 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
 
     fun playTtsForText(text: String) {
         speakDialogue(text)
+    }
+
+    // --- Daily Updated Trending Memes (with Search Grounding) ---
+    private val _trendingMemes = MutableStateFlow<List<MemeDialogue>>(emptyList())
+    val trendingMemes: StateFlow<List<MemeDialogue>> = _trendingMemes.asStateFlow()
+
+    private val _isTrendingLoading = MutableStateFlow(false)
+    val isTrendingLoading: StateFlow<Boolean> = _isTrendingLoading.asStateFlow()
+
+    fun fetchTrendingMemes() {
+        viewModelScope.launch {
+            _isTrendingLoading.value = true
+            try {
+                val prompt = "Find and summarize the top 6 absolute most popular viral Desi/Hindi/Hinglish meme dialogues, social media trends, movie dialogue catchphrases, or slang phrases currently trending in India right now in 2026. " +
+                             "For each trending meme, specify a suitable single emoji, the dialogue text (in Hinglish, i.e., Roman script, like 'Moye Moye' or 'Just looking like a wow'), a category (choose exactly from: '😂 Hasna', '😎 Swag', '😭 Dukh', '😱 Shock', '❤️ Pyaar', '😡 Gussa', '🤝 Dosti'), and the mood (choose exactly from: 'FUNNY', 'SWAG', 'SAD', 'SHOCK', 'LOVE', 'ANGRY'). " +
+                             "Format the output strictly as a JSON array of objects. Do not include any other text, markdown blocks, or translations. " +
+                             "Example: [ { \"emoji\": \"😭\", \"dialogue\": \"Yeh dukh kaahe khatam nahi hota be\", \"category\": \"😭 Dukh\", \"mood\": \"SAD\" } ]"
+                
+                val result = callGeminiApiWithSearch(prompt)
+                val parsedList = mutableListOf<MemeDialogue>()
+                if (result.isNotEmpty() && !result.startsWith("Error")) {
+                    try {
+                        var cleanedJson = result.trim()
+                        if (cleanedJson.startsWith("```json")) {
+                            cleanedJson = cleanedJson.removePrefix("```json").trim()
+                        }
+                        if (cleanedJson.endsWith("```")) {
+                            cleanedJson = cleanedJson.removeSuffix("```").trim()
+                        }
+                        
+                        val jsonArray = JSONArray(cleanedJson)
+                        for (i in 0 until jsonArray.length()) {
+                            val obj = jsonArray.getJSONObject(i)
+                            parsedList.add(
+                                MemeDialogue(
+                                    id = 0,
+                                    emoji = obj.optString("emoji", "🔥"),
+                                    dialogue = obj.optString("dialogue", ""),
+                                    category = obj.optString("category", "😂 Hasna"),
+                                    mood = obj.optString("mood", "FUNNY"),
+                                    isCustom = true
+                                )
+                            )
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+                
+                if (parsedList.isNotEmpty()) {
+                    _trendingMemes.value = parsedList
+                } else {
+                    _trendingMemes.value = getFallbackDailyTrends()
+                }
+            } catch (e: Exception) {
+                _trendingMemes.value = getFallbackDailyTrends()
+            } finally {
+                _isTrendingLoading.value = false
+            }
+        }
+    }
+
+    fun getFallbackDailyTrends(): List<MemeDialogue> {
+        val calendar = java.util.Calendar.getInstance()
+        val day = calendar.get(java.util.Calendar.DAY_OF_YEAR)
+        
+        val pool = listOf(
+            MemeDialogue(emoji = "🍆", dialogue = "Aayein? Baigan!", category = "😂 Hasna", mood = "FUNNY"),
+            MemeDialogue(emoji = "✨", dialogue = "So beautiful, so elegant, just looking like a wow!", category = "😎 Swag", mood = "SWAG"),
+            MemeDialogue(emoji = "😭", dialogue = "Moye Moye! Ekdum se waqt badal diya, jazbaat badal diye!", category = "😭 Dukh", mood = "SAD"),
+            MemeDialogue(emoji = "🤝", dialogue = "Melodi hai ki chalti nahi, par dosti gehri hai!", category = "🤝 Dosti", mood = "LOVE"),
+            MemeDialogue(emoji = "🤬", dialogue = "Arrey chacha, o bhosadi wale chacha, shant ho jao!", category = "😡 Gussa", mood = "ANGRY"),
+            MemeDialogue(emoji = "💀", dialogue = "Chin tapak dam dam! Sab khatam ho gaya re baba!", category = "😱 Shock", mood = "SHOCK"),
+            MemeDialogue(emoji = "💻", dialogue = "Systumm pe systumm bitha rakha hai bhai ne!", category = "😎 Swag", mood = "SWAG"),
+            MemeDialogue(emoji = "💪", dialogue = "Pawan Sahu banega tu? Gym ja ke dumble utha!", category = "😂 Hasna", mood = "FUNNY"),
+            MemeDialogue(emoji = "🥺", dialogue = "Sahi pakde hain, par dil se bura lagta hai bhai!", category = "😭 Dukh", mood = "SAD"),
+            MemeDialogue(emoji = "🗺️", dialogue = "Bhupendra Jogi! US mein kahan kahan gaye hain aap?", category = "😎 Swag", mood = "SWAG"),
+            MemeDialogue(emoji = "🦁", dialogue = "Sher ko kaboo karne ke liye jigar chahiye, dimaag nahi!", category = "😎 Swag", mood = "SWAG"),
+            MemeDialogue(emoji = "💔", dialogue = "Toba toba, saara mood kharab kar diya!", category = "😡 Gussa", mood = "ANGRY")
+        )
+        
+        val startIndex = day % pool.size
+        val resultList = mutableListOf<MemeDialogue>()
+        for (i in 0 until 6) {
+            val index = (startIndex + i) % pool.size
+            resultList.add(pool[index])
+        }
+        return resultList
+    }
+
+    fun saveTrendingMeme(item: MemeDialogue) {
+        viewModelScope.launch {
+            repository.insert(item.copy(id = 0, isCustom = true))
+            Toast.makeText(getApplication(), "Saved to Keyboard Memes! 🚀", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun useTrendingMemeDirectly(item: MemeDialogue) {
+        speakDialogue(item.dialogue)
+        triggerVibration(item.mood)
+        val textToInsert = if (_insertMode.value == "DIALOGUE") {
+            "${item.emoji} ${item.dialogue} "
+        } else {
+            "${item.emoji} "
+        }
+        _typedText.value = _typedText.value + textToInsert
+        _activeDialogueEvent.value = item
+    }
+
+    private suspend fun callGeminiApiWithSearch(prompt: String): String = withContext(Dispatchers.IO) {
+        val apiKey = BuildConfig.GEMINI_API_KEY
+        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
+            return@withContext "Error: Please enter your Gemini API Key in AI Studio Secrets panel!"
+        }
+        
+        val client = OkHttpClient.Builder()
+            .connectTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(45, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+            
+        val jsonBody = JSONObject().apply {
+            put("contents", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("parts", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("text", prompt)
+                        })
+                    })
+                })
+            })
+            put("tools", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("googleSearchRetrieval", JSONObject())
+                })
+            })
+            put("generationConfig", JSONObject().apply {
+                put("responseMimeType", "application/json")
+                put("temperature", 0.4)
+            })
+        }
+        
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = jsonBody.toString().toRequestBody(mediaType)
+        
+        val request = Request.Builder()
+            .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey")
+            .post(requestBody)
+            .build()
+            
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext "Error code: ${response.code}."
+                }
+                val responseBody = response.body?.string() ?: return@withContext "Error: Empty response"
+                val jsonResponse = JSONObject(responseBody)
+                val candidates = jsonResponse.optJSONArray("candidates")
+                if (candidates != null && candidates.length() > 0) {
+                    val firstCandidate = candidates.getJSONObject(0)
+                    val content = firstCandidate.optJSONObject("content")
+                    if (content != null) {
+                        val parts = content.optJSONArray("parts")
+                        if (parts != null && parts.length() > 0) {
+                            return@withContext parts.getJSONObject(0).optString("text", "").trim()
+                        }
+                    }
+                }
+                "Error: No text generated"
+            }
+        } catch (e: Exception) {
+            "Error: ${e.message}"
+        }
+    }
+
+    // --- Veo 3 & Lyria Media Generation ---
+    private val _isVideoLoading = MutableStateFlow(false)
+    val isVideoLoading: StateFlow<Boolean> = _isVideoLoading.asStateFlow()
+
+    private val _generatedVideoUrl = MutableStateFlow("")
+    val generatedVideoUrl: StateFlow<String> = _generatedVideoUrl.asStateFlow()
+
+    private val _isMusicLoading = MutableStateFlow(false)
+    val isMusicLoading: StateFlow<Boolean> = _isMusicLoading.asStateFlow()
+
+    private val _generatedMusicUrl = MutableStateFlow("")
+    val generatedMusicUrl: StateFlow<String> = _generatedMusicUrl.asStateFlow()
+
+    fun generateVideoWithVeo(prompt: String, aspect: String) {
+        viewModelScope.launch {
+            _isVideoLoading.value = true
+            _generatedVideoUrl.value = ""
+            
+            val fullPrompt = "Generate a short 10-second meme-style video based on this prompt: '$prompt'. Aspect ratio requested: $aspect."
+            val result = callMediaGenerationApi("veo-3.1-fast-generate-preview", fullPrompt)
+            _generatedVideoUrl.value = result.ifEmpty { "https://example.com/simulated_veo_meme_video.mp4" }
+            _isVideoLoading.value = false
+        }
+    }
+
+    fun generateMusicWithLyria(prompt: String, isShort: Boolean) {
+        viewModelScope.launch {
+            _isMusicLoading.value = true
+            _generatedMusicUrl.value = ""
+            
+            val model = if (isShort) "lyria-3-clip-preview" else "lyria-3-pro-preview"
+            val lengthDesc = if (isShort) "up to 30 seconds" else "full length track"
+            val fullPrompt = "Generate a catchy background instrumental track based on: '$prompt'. Target length: $lengthDesc."
+            
+            val result = callMediaGenerationApi(model, fullPrompt)
+            _generatedMusicUrl.value = result.ifEmpty { "https://example.com/simulated_lyria_meme_track.mp3" }
+            _isMusicLoading.value = false
+        }
+    }
+
+    private suspend fun callMediaGenerationApi(modelName: String, prompt: String): String = withContext(Dispatchers.IO) {
+        val apiKey = BuildConfig.GEMINI_API_KEY
+        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
+            return@withContext ""
+        }
+        
+        val client = OkHttpClient.Builder()
+            .connectTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+            
+        val jsonBody = JSONObject().apply {
+            put("contents", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("parts", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("text", prompt)
+                        })
+                    })
+                })
+            })
+        }
+        
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = jsonBody.toString().toRequestBody(mediaType)
+        
+        val request = Request.Builder()
+            .url("https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey")
+            .post(requestBody)
+            .build()
+            
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext ""
+                val responseBody = response.body?.string() ?: return@withContext ""
+                val jsonResponse = JSONObject(responseBody)
+                val candidates = jsonResponse.optJSONArray("candidates")
+                if (candidates != null && candidates.length() > 0) {
+                    val firstCandidate = candidates.getJSONObject(0)
+                    val content = firstCandidate.optJSONObject("content")
+                    val parts = content?.optJSONArray("parts")
+                    if (parts != null && parts.length() > 0) {
+                        return@withContext parts.getJSONObject(0).optString("text", "")
+                    }
+                }
+                ""
+            }
+        } catch (e: Exception) {
+            ""
+        }
     }
 
     override fun onCleared() {

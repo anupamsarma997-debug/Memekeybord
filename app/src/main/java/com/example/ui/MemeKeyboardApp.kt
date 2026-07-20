@@ -1144,7 +1144,7 @@ fun InteractiveKeyboardPanel(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                listOf("⌨️ Text", "😂 Memes", "📜 Shayari", "✨ AI Writer", "🎨 Custom").forEach { tab ->
+                listOf("⌨️ Text", "😂 Memes", "📜 Shayari", "🔥 Trending", "✨ AI Writer", "🎨 Custom").forEach { tab ->
                     val isSelected = activeKeyboardTab == tab
                     Box(
                         modifier = Modifier
@@ -1177,6 +1177,9 @@ fun InteractiveKeyboardPanel(
                         onNumberModeToggle = { viewModel.onNumberModeToggle() },
                         onDone = { viewModel.copyToClipboard() }
                     )
+                }
+                "🔥 Trending" -> {
+                    TrendingSection(viewModel = viewModel)
                 }
                 "😂 Memes" -> {
                     Column {
@@ -1256,13 +1259,7 @@ fun InteractiveKeyboardPanel(
                     }
                 }
                 "✨ AI Writer" -> {
-                    AiWriterSection(
-                        isLoading = isAiLoading,
-                        generatedText = generatedAiText,
-                        onGenerate = { cat, topic -> viewModel.generateAiDialogue(cat, topic) },
-                        onUseText = { viewModel.useGeneratedAiText() },
-                        onPlayTts = { viewModel.playTtsForText(it) }
-                    )
+                    AiWriterSection(viewModel = viewModel)
                 }
                 "🎨 Custom" -> {
                     InlineMemeCreator(onAddDialogue = { emoji, dialogue, category, mood ->
@@ -1509,22 +1506,12 @@ fun ShayariKeyCard(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AiWriterSection(
-    isLoading: Boolean,
-    generatedText: String,
-    onGenerate: (String, String) -> Unit,
-    onUseText: () -> Unit,
-    onPlayTts: (String) -> Unit
+    viewModel: KeyboardViewModel
 ) {
-    var selectedCategory by remember { mutableStateOf("Attitude Status 😎") }
-    var topic by remember { mutableStateOf("") }
-
-    val categories = listOf(
-        "Attitude Status 😎",
-        "Romantic Shayari ❤️",
-        "Sad Shayari 😭",
-        "Funny Dialogue 🤣",
-        "Dosti Status 🤝"
-    )
+    var selectedAiSubTab by remember { mutableStateOf("✍️ Status") }
+    
+    val isAiLoading by viewModel.isAiLoading.collectAsStateWithLifecycle()
+    val generatedText by viewModel.generatedAiText.collectAsStateWithLifecycle()
 
     Column(
         modifier = Modifier
@@ -1532,131 +1519,478 @@ fun AiWriterSection(
             .padding(4.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(
-            text = "✨ GENIUS AI SHAYARI & MEME WRITER (GEMINI)",
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Black,
-            color = DesiYellow
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            categories.forEach { cat ->
-                val isSelected = selectedCategory == cat
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(if (isSelected) DesiYellow else Color(0xFF222225))
-                        .clickable { selectedCategory = cat }
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        text = cat,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isSelected) DesiCharcoal else Color.Gray
-                    )
-                }
-            }
-        }
-
+        // AI Sub-Tabs
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            OutlinedTextField(
-                value = topic,
-                onValueChange = { topic = it },
-                placeholder = { Text("Topic: e.g. Dosti, Sher, Mohabbat...", fontSize = 11.sp, color = Color.Gray) },
-                singleLine = true,
-                modifier = Modifier.weight(1f).height(42.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color(0xFF1F1F23),
-                    unfocusedContainerColor = Color(0xFF1F1F23),
-                    focusedBorderColor = DesiYellow,
-                    unfocusedBorderColor = Color.DarkGray
-                ),
-                textStyle = TextStyle(fontSize = 12.sp, color = DesiWhite)
-            )
-
-            Button(
-                onClick = { if (topic.trim().isNotEmpty()) onGenerate(selectedCategory, topic.trim()) },
-                enabled = !isLoading && topic.trim().isNotEmpty(),
-                colors = ButtonDefaults.buttonColors(containerColor = DesiYellow),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier.height(42.dp)
-            ) {
-                Text(
-                    text = if (isLoading) "Writing..." else "Write ✨",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Black,
-                    color = DesiCharcoal
-                )
+            listOf("✍️ Status", "🎥 Veo Video", "🎵 Lyria Music").forEach { tab ->
+                val isSelected = selectedAiSubTab == tab
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) DesiPurple else Color(0xFF222225))
+                        .clickable { selectedAiSubTab = tab }
+                        .weight(1f)
+                        .padding(vertical = 6.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = tab,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSelected) DesiWhite else Color.Gray
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
             }
         }
 
-        if (isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(110.dp)
-                    .background(Color(0xFF1E1E22), RoundedCornerShape(12.dp))
-                    .border(1.dp, Color.Gray.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = DesiYellow, modifier = Modifier.size(24.dp))
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Gemini is cooking some pure Desi words...", fontSize = 11.sp, color = Color.LightGray)
-                }
-            }
-        } else if (generatedText.isNotEmpty()) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .border(1.dp, DesiYellow.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E22))
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+        Divider(color = Color.DarkGray.copy(alpha = 0.2f), thickness = 1.dp)
+
+        when (selectedAiSubTab) {
+            "✍️ Status" -> {
+                var selectedCategory by remember { mutableStateOf("Attitude Status 😎") }
+                var topic by remember { mutableStateOf("") }
+
+                val categories = listOf(
+                    "Attitude Status 😎",
+                    "Romantic Shayari ❤️",
+                    "Sad Shayari 😭",
+                    "Funny Dialogue 🤣",
+                    "Dosti Status 🤝"
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "\"$generatedText\"",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = DesiWhite,
-                        lineHeight = 18.sp,
-                        fontFamily = FontFamily.Serif
+                        text = "✨ GENIUS AI SHAYARI & STATUS WRITER",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        color = DesiYellow
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        categories.forEach { cat ->
+                            val isSelected = selectedCategory == cat
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) DesiYellow else Color(0xFF222225))
+                                    .clickable { selectedCategory = cat }
+                                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = cat,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) DesiCharcoal else Color.Gray
+                                )
+                            }
+                        }
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Button(
-                            onClick = onUseText,
-                            colors = ButtonDefaults.buttonColors(containerColor = DesiPurple),
-                            modifier = Modifier.weight(1f).height(32.dp),
-                            contentPadding = PaddingValues(0.dp),
-                            shape = RoundedCornerShape(6.dp)
-                        ) {
-                            Text("➕ Use in Board", fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
+                        OutlinedTextField(
+                            value = topic,
+                            onValueChange = { topic = it },
+                            placeholder = { Text("Topic: e.g. Dosti, Sher, Mohabbat...", fontSize = 11.sp, color = Color.Gray) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f).height(42.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFF1F1F23),
+                                unfocusedContainerColor = Color(0xFF1F1F23),
+                                focusedBorderColor = DesiYellow,
+                                unfocusedBorderColor = Color.DarkGray
+                            ),
+                            textStyle = TextStyle(fontSize = 12.sp, color = DesiWhite)
+                        )
 
                         Button(
-                            onClick = { onPlayTts(generatedText) },
-                            colors = ButtonDefaults.buttonColors(containerColor = DesiPink),
-                            modifier = Modifier.weight(1f).height(32.dp),
-                            contentPadding = PaddingValues(0.dp),
-                            shape = RoundedCornerShape(6.dp)
+                            onClick = { if (topic.trim().isNotEmpty()) viewModel.generateAiDialogue(selectedCategory, topic.trim()) },
+                            enabled = !isAiLoading && topic.trim().isNotEmpty(),
+                            colors = ButtonDefaults.buttonColors(containerColor = DesiYellow),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(42.dp)
                         ) {
-                            Text("🗣️ Play Audio", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = if (isAiLoading) "Writing..." else "Write ✨",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                color = DesiCharcoal
+                            )
+                        }
+                    }
+
+                    if (isAiLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(110.dp)
+                                .background(Color(0xFF1E1E22), RoundedCornerShape(12.dp))
+                                .border(1.dp, Color.Gray.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = DesiYellow, modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Gemini is cooking some pure Desi words...", fontSize = 11.sp, color = Color.LightGray)
+                            }
+                        }
+                    } else if (generatedText.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, DesiYellow.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E22))
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Text(
+                                    text = "\"$generatedText\"",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = DesiWhite,
+                                    lineHeight = 18.sp,
+                                    fontFamily = FontFamily.Serif
+                                )
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = { viewModel.useGeneratedAiText() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = DesiPurple),
+                                        modifier = Modifier.weight(1f).height(32.dp),
+                                        contentPadding = PaddingValues(0.dp),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text("➕ Use in Board", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+
+                                    Button(
+                                        onClick = { viewModel.playTtsForText(generatedText) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = DesiPink),
+                                        modifier = Modifier.weight(1f).height(32.dp),
+                                        contentPadding = PaddingValues(0.dp),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text("🗣️ Play Audio", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            "🎥 Veo Video" -> {
+                var prompt by remember { mutableStateOf("") }
+                var selectedAspect by remember { mutableStateOf("16:9") }
+                val isVideoLoading by viewModel.isVideoLoading.collectAsStateWithLifecycle()
+                val generatedVideoUrl by viewModel.generatedVideoUrl.collectAsStateWithLifecycle()
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "🎥 VEO 3 VIDEO GENERATOR",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        color = DesiOrange
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Aspect Ratio:", fontSize = 11.sp, color = Color.Gray)
+                        listOf("16:9", "9:16").forEach { aspect ->
+                            val isSelected = selectedAspect == aspect
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) DesiOrange else Color(0xFF222225))
+                                    .clickable { selectedAspect = aspect }
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = aspect,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) Color.Black else Color.Gray
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = prompt,
+                            onValueChange = { prompt = it },
+                            placeholder = { Text("Describe your funny meme video scenario...", fontSize = 11.sp, color = Color.Gray) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f).height(42.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFF1F1F23),
+                                unfocusedContainerColor = Color(0xFF1F1F23),
+                                focusedBorderColor = DesiOrange,
+                                unfocusedBorderColor = Color.DarkGray
+                            ),
+                            textStyle = TextStyle(fontSize = 12.sp, color = DesiWhite)
+                        )
+
+                        Button(
+                            onClick = { if (prompt.trim().isNotEmpty()) viewModel.generateVideoWithVeo(prompt.trim(), selectedAspect) },
+                            enabled = !isVideoLoading && prompt.trim().isNotEmpty(),
+                            colors = ButtonDefaults.buttonColors(containerColor = DesiOrange),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(42.dp)
+                        ) {
+                            Text(
+                                text = if (isVideoLoading) "Cooking..." else "Gen Video 🎬",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.Black
+                            )
+                        }
+                    }
+
+                    if (isVideoLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(130.dp)
+                                .background(Color(0xFF1E1E22), RoundedCornerShape(12.dp))
+                                .border(1.dp, Color.Gray.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = DesiOrange, modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Veo 3.1 is synthesizing cinematic meme action...", fontSize = 11.sp, color = Color.LightGray)
+                            }
+                        }
+                    } else if (generatedVideoUrl.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, DesiOrange.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E22))
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(110.dp)
+                                        .background(Color.Black, RoundedCornerShape(8.dp))
+                                        .border(2.dp, DesiOrange.copy(alpha = 0.4f), RoundedCornerShape(8.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("🎬 VEO MEME PREVIEW PLAYING", fontSize = 10.sp, color = DesiOrange, fontWeight = FontWeight.Bold)
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text("Aspect: $selectedAspect", fontSize = 9.sp, color = Color.Gray)
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(imageVector = Icons.Default.PlayArrow, contentDescription = "Play", tint = Color.White, modifier = Modifier.size(24.dp))
+                                            Icon(imageVector = Icons.Default.Refresh, contentDescription = "Loop", tint = Color.White, modifier = Modifier.size(20.dp))
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = { viewModel.useGeneratedAiText() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = DesiPurple),
+                                        modifier = Modifier.weight(1f).height(32.dp),
+                                        contentPadding = PaddingValues(0.dp),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text("📲 Send / Share Video", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            "🎵 Lyria Music" -> {
+                var prompt by remember { mutableStateOf("") }
+                var isShortClip by remember { mutableStateOf(true) }
+                val isMusicLoading by viewModel.isMusicLoading.collectAsStateWithLifecycle()
+                val generatedMusicUrl by viewModel.generatedMusicUrl.collectAsStateWithLifecycle()
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "🎵 LYRIA MUSIC GENERATOR",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        color = DesiGreen
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Duration Mode:", fontSize = 11.sp, color = Color.Gray)
+                        listOf("Clip (30s) 🎵", "Full Track (Pro) 🎶").forEach { mode ->
+                            val isSelected = (mode.contains("Clip") && isShortClip) || (mode.contains("Full") && !isShortClip)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(if (isSelected) DesiGreen else Color(0xFF222225))
+                                    .clickable { isShortClip = mode.contains("Clip") }
+                                    .padding(horizontal = 10.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = mode,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) Color.Black else Color.Gray
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = prompt,
+                            onValueChange = { prompt = it },
+                            placeholder = { Text("Describe style: e.g. Punjabi dhol, upbeat electro-pop...", fontSize = 11.sp, color = Color.Gray) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f).height(42.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFF1F1F23),
+                                unfocusedContainerColor = Color(0xFF1F1F23),
+                                focusedBorderColor = DesiGreen,
+                                unfocusedBorderColor = Color.DarkGray
+                            ),
+                            textStyle = TextStyle(fontSize = 12.sp, color = DesiWhite)
+                        )
+
+                        Button(
+                            onClick = { if (prompt.trim().isNotEmpty()) viewModel.generateMusicWithLyria(prompt.trim(), isShortClip) },
+                            enabled = !isMusicLoading && prompt.trim().isNotEmpty(),
+                            colors = ButtonDefaults.buttonColors(containerColor = DesiGreen),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.height(42.dp)
+                        ) {
+                            Text(
+                                text = if (isMusicLoading) "Tuning..." else "Gen Music 🎹",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color.Black
+                            )
+                        }
+                    }
+
+                    if (isMusicLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(130.dp)
+                                .background(Color(0xFF1E1E22), RoundedCornerShape(12.dp))
+                                .border(1.dp, Color.Gray.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                CircularProgressIndicator(color = DesiGreen, modifier = Modifier.size(24.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text("Lyria is synthesizing pure acoustic desi waves...", fontSize = 11.sp, color = Color.LightGray)
+                            }
+                        }
+                    } else if (generatedMusicUrl.isNotEmpty()) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .border(1.dp, DesiGreen.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E22))
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(110.dp)
+                                        .background(Color.Black, RoundedCornerShape(8.dp))
+                                        .border(2.dp, DesiGreen.copy(alpha = 0.4f), RoundedCornerShape(8.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Text("🎵 LYRIA HIGH-FI AUDIO MASTER", fontSize = 10.sp, color = DesiGreen, fontWeight = FontWeight.Bold)
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            listOf(20.dp, 45.dp, 30.dp, 60.dp, 25.dp, 50.dp, 15.dp, 40.dp).forEach { h ->
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(4.dp)
+                                                        .height(h)
+                                                        .background(DesiGreen, RoundedCornerShape(2.dp))
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(10.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = { viewModel.useGeneratedAiText() },
+                                        colors = ButtonDefaults.buttonColors(containerColor = DesiPurple),
+                                        modifier = Modifier.weight(1f).height(32.dp),
+                                        contentPadding = PaddingValues(0.dp),
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Text("📲 Send / Share Audio", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1793,3 +2127,178 @@ fun InlineMemeCreator(
         }
     }
 }
+
+@Composable
+fun TrendingSection(
+    viewModel: KeyboardViewModel,
+    modifier: Modifier = Modifier
+) {
+    val trendingMemes by viewModel.trendingMemes.collectAsStateWithLifecycle()
+    val isTrendingLoading by viewModel.isTrendingLoading.collectAsStateWithLifecycle()
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(4.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "🔥 TODAY'S DESI TRENDS",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Black,
+                    color = DesiOrange
+                )
+                Text(
+                    text = "Daily updated with Search Grounding",
+                    fontSize = 9.sp,
+                    color = Color.Gray
+                )
+            }
+
+            Button(
+                onClick = { viewModel.fetchTrendingMemes() },
+                enabled = !isTrendingLoading,
+                colors = ButtonDefaults.buttonColors(containerColor = DesiPurple),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                modifier = Modifier.height(28.dp)
+            ) {
+                if (isTrendingLoading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        strokeWidth = 1.5.dp,
+                        modifier = Modifier.size(12.dp)
+                    )
+                } else {
+                    Text("Refresh 🔄", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (isTrendingLoading && trendingMemes.isEmpty()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = DesiOrange)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Fetching latest web trends...", color = Color.LightGray, fontSize = 11.sp)
+                }
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(1),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(trendingMemes) { item ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, Color.DarkGray, RoundedCornerShape(12.dp)),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E22)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(DesiPurple.copy(alpha = 0.2f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(item.emoji, fontSize = 18.sp)
+                            }
+
+                            Spacer(modifier = Modifier.width(10.dp))
+
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = item.dialogue,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = DesiWhite,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .background(DesiPink.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(item.category, fontSize = 8.sp, color = DesiPink, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(6.dp))
+
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = { viewModel.playTtsForText(item.dialogue) },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = "Speak",
+                                        tint = DesiGreen,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { viewModel.useTrendingMemeDirectly(item) },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Use",
+                                        tint = DesiYellow,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+
+                                IconButton(
+                                    onClick = { viewModel.saveTrendingMeme(item) },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Save to Keyboard",
+                                        tint = DesiBlue,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
