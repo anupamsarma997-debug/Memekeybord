@@ -1,6 +1,9 @@
 package com.example.ui
 
+import android.content.Context
 import android.content.Intent
+import android.provider.Settings
+import android.view.inputmethod.InputMethodManager
 import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -32,6 +35,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -110,6 +114,9 @@ fun MemeKeyboardApp(
                 Toast.makeText(context, "Meme Keyboard reset to default dialogues!", Toast.LENGTH_SHORT).show()
             })
 
+            // Onboarding System Keyboard Activation Banner
+            SystemKeyboardActivationCard()
+
             // Main Workspace Board Card
             MessageBoardCard(
                 typedText = typedText,
@@ -156,46 +163,16 @@ fun MemeKeyboardApp(
                 )
             }
 
-            // Search Bar & Filters
-            FilterAndSearchSection(
-                searchQuery = searchQuery,
-                onQueryChange = { viewModel.updateSearchQuery(it) },
+            // Interactive Smart Keyboard Panel
+            InteractiveKeyboardPanel(
+                viewModel = viewModel,
                 categories = categories,
+                filteredDialogues = filteredDialogues,
                 selectedTab = selectedTab,
-                onTabSelect = { viewModel.updateSelectedTab(it) }
+                searchQuery = searchQuery,
+                onTabSelect = { viewModel.updateSelectedTab(it) },
+                onQueryChange = { viewModel.updateSearchQuery(it) }
             )
-
-            // Keyboard Grid of dialogues
-            if (filteredDialogues.isEmpty()) {
-                EmptyStateView(
-                    searchQuery = searchQuery,
-                    selectedTab = selectedTab,
-                    onResetSearch = {
-                        viewModel.updateSearchQuery("")
-                        viewModel.updateSelectedTab("All")
-                    }
-                )
-            } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(2),
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(filteredDialogues, key = { it.id }) { item ->
-                        MemeKeyCard(
-                            item = item,
-                            onClick = { viewModel.onEmojiKeyPress(item) },
-                            onToggleFavorite = { viewModel.toggleFavorite(item) },
-                            onDelete = if (item.isCustom) {
-                                { viewModel.deleteDialogue(item) }
-                            } else null
-                        )
-                    }
-                }
-            }
         }
 
         // Active Dialogue Event Splash Pop-up Overlay
@@ -220,6 +197,75 @@ fun MemeKeyboardApp(
                     Toast.makeText(context, "Meme dialogue added! 🚀", Toast.LENGTH_SHORT).show()
                 }
             )
+        }
+    }
+}
+
+@Composable
+fun SystemKeyboardActivationCard(modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    Card(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .border(2.dp, DesiYellow, RoundedCornerShape(12.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1C15))
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "🌐 USE KEYBOARD IN WHATSAPP / TELEGRAM",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    color = DesiYellow
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Type Desi Memes & Shayaris globally! Follow these 2 easy steps:",
+                fontSize = 10.sp,
+                color = Color.LightGray
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = {
+                        try {
+                            val intent = Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)
+                            context.startActivity(intent)
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Settings couldn't be opened. Please enable manually.", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DesiOrange),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f).height(34.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text("1. Enable Keyboard ⚙️", fontSize = 10.sp, fontWeight = FontWeight.Black, color = DesiWhite)
+                }
+
+                Button(
+                    onClick = {
+                        try {
+                            val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager
+                            imm?.showInputMethodPicker()
+                        } catch (e: Exception) {
+                            Toast.makeText(context, "Couldn't open keyboard switcher.", Toast.LENGTH_LONG).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = DesiGreen),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.weight(1f).height(34.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Text("2. Switch Keyboard 🔄", fontSize = 10.sp, fontWeight = FontWeight.Black, color = DesiWhite)
+                }
+            }
         }
     }
 }
@@ -1055,6 +1101,695 @@ fun EmptyStateView(
             colors = ButtonDefaults.buttonColors(containerColor = DesiPurple)
         ) {
             Text("Reset Search & Filters", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+// --- Dynamic Keyboard Layout & Composables ---
+
+@Composable
+fun InteractiveKeyboardPanel(
+    viewModel: KeyboardViewModel,
+    categories: List<Pair<String, String>>,
+    filteredDialogues: List<MemeDialogue>,
+    selectedTab: String,
+    searchQuery: String,
+    onTabSelect: (String) -> Unit,
+    onQueryChange: (String) -> Unit
+) {
+    var activeKeyboardTab by remember { mutableStateOf("⌨️ Text") }
+
+    val shiftState by viewModel.keyboardShiftState.collectAsStateWithLifecycle()
+    val numberMode by viewModel.keyboardNumberMode.collectAsStateWithLifecycle()
+    val isAiLoading by viewModel.isAiLoading.collectAsStateWithLifecycle()
+    val generatedAiText by viewModel.generatedAiText.collectAsStateWithLifecycle()
+
+    val context = LocalContext.current
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .border(2.dp, DesiPurple.copy(alpha = 0.5f), RoundedCornerShape(20.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF161619)),
+        shape = RoundedCornerShape(20.dp)
+    ) {
+        Column(modifier = Modifier.padding(8.dp)) {
+            // Tab row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf("⌨️ Text", "😂 Memes", "📜 Shayari", "✨ AI Writer", "🎨 Custom").forEach { tab ->
+                    val isSelected = activeKeyboardTab == tab
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isSelected) DesiPurple else Color(0xFF222225))
+                            .clickable { activeKeyboardTab = tab }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = tab,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isSelected) DesiWhite else Color.Gray
+                        )
+                    }
+                }
+            }
+
+            Divider(color = Color.DarkGray.copy(alpha = 0.3f), thickness = 1.dp, modifier = Modifier.padding(bottom = 10.dp))
+
+            when (activeKeyboardTab) {
+                "⌨️ Text" -> {
+                    SimulatedQwertyKeyboard(
+                        shiftState = shiftState,
+                        numberMode = numberMode,
+                        onKeyTyped = { viewModel.onKeyTyped(it) },
+                        onBackspace = { viewModel.onBackspacePressed() },
+                        onSpace = { viewModel.onSpacePressed() },
+                        onShiftToggle = { viewModel.onShiftToggle() },
+                        onNumberModeToggle = { viewModel.onNumberModeToggle() },
+                        onDone = { viewModel.copyToClipboard() }
+                    )
+                }
+                "😂 Memes" -> {
+                    Column {
+                        FilterAndSearchSection(
+                            searchQuery = searchQuery,
+                            onQueryChange = onQueryChange,
+                            categories = categories,
+                            selectedTab = selectedTab,
+                            onTabSelect = onTabSelect
+                        )
+
+                        val memeDialogues = filteredDialogues.filter { it.category != "📜 Shayari" }
+                        if (memeDialogues.isEmpty()) {
+                            EmptyStateView(
+                                searchQuery = searchQuery,
+                                selectedTab = selectedTab,
+                                onResetSearch = {
+                                    onQueryChange("")
+                                    onTabSelect("All")
+                                }
+                            )
+                        } else {
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(2),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(240.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(memeDialogues, key = { it.id }) { item ->
+                                    MemeKeyCard(
+                                        item = item,
+                                        onClick = { viewModel.onEmojiKeyPress(item) },
+                                        onToggleFavorite = { viewModel.toggleFavorite(item) },
+                                        onDelete = if (item.isCustom) {
+                                            { viewModel.deleteDialogue(item) }
+                                        } else null
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                "📜 Shayari" -> {
+                    val shayariList = filteredDialogues.filter { it.category == "📜 Shayari" }
+                    if (shayariList.isEmpty()) {
+                        Box(modifier = Modifier.fillMaxWidth().height(200.dp), contentAlignment = Alignment.Center) {
+                            Text("No Shayaris Found! Add custom ones in Custom tab.", color = Color.Gray, fontSize = 13.sp)
+                        }
+                    } else {
+                        Column {
+                            Text(
+                                "📜 POPULAR ROMAN HINDI SHAYARIS",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = DesiPink,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(1),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(240.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(shayariList, key = { it.id }) { item ->
+                                    ShayariKeyCard(
+                                        item = item,
+                                        onClick = { viewModel.onEmojiKeyPress(item) },
+                                        onToggleFavorite = { viewModel.toggleFavorite(item) }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                "✨ AI Writer" -> {
+                    AiWriterSection(
+                        isLoading = isAiLoading,
+                        generatedText = generatedAiText,
+                        onGenerate = { cat, topic -> viewModel.generateAiDialogue(cat, topic) },
+                        onUseText = { viewModel.useGeneratedAiText() },
+                        onPlayTts = { viewModel.playTtsForText(it) }
+                    )
+                }
+                "🎨 Custom" -> {
+                    InlineMemeCreator(onAddDialogue = { emoji, dialogue, category, mood ->
+                        viewModel.addNewDialogue(emoji, dialogue, category, mood)
+                    })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SimulatedQwertyKeyboard(
+    shiftState: Boolean,
+    numberMode: Boolean,
+    onKeyTyped: (String) -> Unit,
+    onBackspace: () -> Unit,
+    onSpace: () -> Unit,
+    onShiftToggle: () -> Unit,
+    onNumberModeToggle: () -> Unit,
+    onDone: () -> Unit
+) {
+    val row1 = if (numberMode) {
+        listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0")
+    } else {
+        listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p")
+    }
+
+    val row2 = if (numberMode) {
+        listOf("@", "#", "$", "%", "&", "*", "-", "+", "(", ")")
+    } else {
+        listOf("a", "s", "d", "f", "g", "h", "j", "k", "l")
+    }
+
+    val row3 = if (numberMode) {
+        listOf("!", "\"", "'", ":", ";", "/", "?", ",")
+    } else {
+        listOf("z", "x", "c", "v", "b", "n", "m")
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF161619))
+            .padding(bottom = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
+        ) {
+            row1.forEach { char ->
+                val displayChar = if (shiftState && !numberMode) char.uppercase() else char
+                KeyboardKey(displayChar, modifier = Modifier.weight(1f)) { onKeyTyped(char) }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally)
+        ) {
+            if (!numberMode) Spacer(modifier = Modifier.width(10.dp))
+            row2.forEach { char ->
+                val displayChar = if (shiftState && !numberMode) char.uppercase() else char
+                KeyboardKey(displayChar, modifier = Modifier.weight(1f)) { onKeyTyped(char) }
+            }
+            if (!numberMode) Spacer(modifier = Modifier.width(10.dp))
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(1.5f)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(if (shiftState) DesiPurple else Color(0xFF2E2E33))
+                    .clickable { onShiftToggle() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("⇧", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = DesiWhite)
+            }
+
+            row3.forEach { char ->
+                val displayChar = if (shiftState && !numberMode) char.uppercase() else char
+                KeyboardKey(displayChar, modifier = Modifier.weight(1f)) { onKeyTyped(char) }
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(1.5f)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF2E2E33))
+                    .clickable { onBackspace() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("⌫", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = DesiWhite)
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .weight(2f)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF2D2D31))
+                    .clickable { onNumberModeToggle() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (numberMode) "ABC" else "?123",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DesiWhite
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(5f)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Color(0xFF38383D))
+                    .clickable { onSpace() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("Space", fontSize = 12.sp, fontWeight = FontWeight.Medium, color = Color.LightGray)
+            }
+
+            Box(
+                modifier = Modifier
+                    .weight(2.5f)
+                    .height(42.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(Brush.horizontalGradient(listOf(DesiPurple, DesiPink)))
+                    .clickable { onDone() },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("COPY", fontSize = 11.sp, fontWeight = FontWeight.Black, color = DesiWhite)
+            }
+        }
+    }
+}
+
+@Composable
+fun KeyboardKey(
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .height(42.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(Color(0xFF28282C))
+            .clickable { onClick() }
+            .border(1.dp, Color.White.copy(alpha = 0.05f), RoundedCornerShape(6.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = DesiWhite
+        )
+    }
+}
+
+@Composable
+fun ShayariKeyCard(
+    item: MemeDialogue,
+    onClick: () -> Unit,
+    onToggleFavorite: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(95.dp)
+            .shadow(4.dp, RoundedCornerShape(12.dp))
+            .border(1.dp, DesiPink.copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1C1C1F)),
+        onClick = onClick
+    ) {
+        Box(modifier = Modifier.fillMaxSize().padding(10.dp)) {
+            Column(
+                modifier = Modifier.fillMaxSize().padding(end = 40.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(item.emoji, fontSize = 20.sp)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(DesiPink.copy(alpha = 0.15f))
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = "SHAYARI",
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Black,
+                            color = DesiPink
+                        )
+                    }
+                }
+
+                Text(
+                    text = item.dialogue,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = DesiWhite,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    lineHeight = 14.sp
+                )
+            }
+
+            IconButton(
+                onClick = onToggleFavorite,
+                modifier = Modifier
+                    .size(28.dp)
+                    .align(Alignment.TopEnd)
+            ) {
+                Icon(
+                    imageVector = if (item.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
+                    contentDescription = "Favorite",
+                    tint = if (item.isFavorite) DesiPink else Color.Gray,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AiWriterSection(
+    isLoading: Boolean,
+    generatedText: String,
+    onGenerate: (String, String) -> Unit,
+    onUseText: () -> Unit,
+    onPlayTts: (String) -> Unit
+) {
+    var selectedCategory by remember { mutableStateOf("Attitude Status 😎") }
+    var topic by remember { mutableStateOf("") }
+
+    val categories = listOf(
+        "Attitude Status 😎",
+        "Romantic Shayari ❤️",
+        "Sad Shayari 😭",
+        "Funny Dialogue 🤣",
+        "Dosti Status 🤝"
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "✨ GENIUS AI SHAYARI & MEME WRITER (GEMINI)",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Black,
+            color = DesiYellow
+        )
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            categories.forEach { cat ->
+                val isSelected = selectedCategory == cat
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isSelected) DesiYellow else Color(0xFF222225))
+                        .clickable { selectedCategory = cat }
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = cat,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSelected) DesiCharcoal else Color.Gray
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = topic,
+                onValueChange = { topic = it },
+                placeholder = { Text("Topic: e.g. Dosti, Sher, Mohabbat...", fontSize = 11.sp, color = Color.Gray) },
+                singleLine = true,
+                modifier = Modifier.weight(1f).height(42.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color(0xFF1F1F23),
+                    unfocusedContainerColor = Color(0xFF1F1F23),
+                    focusedBorderColor = DesiYellow,
+                    unfocusedBorderColor = Color.DarkGray
+                ),
+                textStyle = TextStyle(fontSize = 12.sp, color = DesiWhite)
+            )
+
+            Button(
+                onClick = { if (topic.trim().isNotEmpty()) onGenerate(selectedCategory, topic.trim()) },
+                enabled = !isLoading && topic.trim().isNotEmpty(),
+                colors = ButtonDefaults.buttonColors(containerColor = DesiYellow),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.height(42.dp)
+            ) {
+                Text(
+                    text = if (isLoading) "Writing..." else "Write ✨",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Black,
+                    color = DesiCharcoal
+                )
+            }
+        }
+
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(110.dp)
+                    .background(Color(0xFF1E1E22), RoundedCornerShape(12.dp))
+                    .border(1.dp, Color.Gray.copy(alpha = 0.15f), RoundedCornerShape(12.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = DesiYellow, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Gemini is cooking some pure Desi words...", fontSize = 11.sp, color = Color.LightGray)
+                }
+            }
+        } else if (generatedText.isNotEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, DesiYellow.copy(alpha = 0.3f), RoundedCornerShape(12.dp)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E22))
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        text = "\"$generatedText\"",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = DesiWhite,
+                        lineHeight = 18.sp,
+                        fontFamily = FontFamily.Serif
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onUseText,
+                            colors = ButtonDefaults.buttonColors(containerColor = DesiPurple),
+                            modifier = Modifier.weight(1f).height(32.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text("➕ Use in Board", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = { onPlayTts(generatedText) },
+                            colors = ButtonDefaults.buttonColors(containerColor = DesiPink),
+                            modifier = Modifier.weight(1f).height(32.dp),
+                            contentPadding = PaddingValues(0.dp),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text("🗣️ Play Audio", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun InlineMemeCreator(
+    onAddDialogue: (String, String, String, String) -> Unit
+) {
+    var emoji by remember { mutableStateOf("") }
+    var dialogue by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf("😂 Hasna") }
+    var mood by remember { mutableStateOf("FUNNY") }
+
+    val categories = listOf("😂 Hasna", "😎 Swag", "😭 Dukh", "😱 Shock", "❤️ Pyaar", "😡 Gussa", "🤝 Dosti")
+    val moods = listOf("FUNNY", "SWAG", "SAD", "SHOCK", "LOVE", "ANGRY")
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "🎨 DESIGN CUSTOM DIALOGUE BUTTON",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Black,
+            color = DesiGreen
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedTextField(
+                value = emoji,
+                onValueChange = { emoji = it.take(2) },
+                placeholder = { Text("Emoji: 🤩", fontSize = 11.sp, color = Color.Gray) },
+                singleLine = true,
+                modifier = Modifier.width(100.dp).height(42.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color(0xFF1F1F23),
+                    unfocusedContainerColor = Color(0xFF1F1F23),
+                    focusedBorderColor = DesiGreen,
+                    unfocusedBorderColor = Color.DarkGray
+                ),
+                textStyle = TextStyle(fontSize = 12.sp, color = DesiWhite)
+            )
+
+            OutlinedTextField(
+                value = dialogue,
+                onValueChange = { dialogue = it },
+                placeholder = { Text("Dialogue text...", fontSize = 11.sp, color = Color.Gray) },
+                singleLine = true,
+                modifier = Modifier.weight(1f).height(42.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedContainerColor = Color(0xFF1F1F23),
+                    unfocusedContainerColor = Color(0xFF1F1F23),
+                    focusedBorderColor = DesiGreen,
+                    unfocusedBorderColor = Color.DarkGray
+                ),
+                textStyle = TextStyle(fontSize = 12.sp, color = DesiWhite)
+            )
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            categories.forEach { cat ->
+                val isSelected = category == cat
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isSelected) DesiGreen else Color(0xFF222225))
+                        .clickable { category = cat }
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = cat,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSelected) DesiCharcoal else Color.Gray
+                    )
+                }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            moods.forEach { md ->
+                val isSelected = mood == md
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (isSelected) DesiGreen else Color(0xFF222225))
+                        .clickable { mood = md }
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                ) {
+                    Text(
+                        text = md,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isSelected) DesiCharcoal else Color.Gray
+                    )
+                }
+            }
+        }
+
+        Button(
+            onClick = {
+                if (emoji.trim().isNotEmpty() && dialogue.trim().isNotEmpty()) {
+                    onAddDialogue(emoji.trim(), dialogue.trim(), category, mood)
+                    emoji = ""
+                    dialogue = ""
+                }
+            },
+            enabled = emoji.trim().isNotEmpty() && dialogue.trim().isNotEmpty(),
+            colors = ButtonDefaults.buttonColors(containerColor = DesiGreen),
+            modifier = Modifier.fillMaxWidth().height(36.dp),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text("Create Custom Key Button 🚀", fontSize = 11.sp, fontWeight = FontWeight.Black, color = DesiCharcoal)
         }
     }
 }

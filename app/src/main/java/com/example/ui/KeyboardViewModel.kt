@@ -22,19 +22,42 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Locale
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaType
+import org.json.JSONObject
+import org.json.JSONArray
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.example.BuildConfig
+
+import android.content.SharedPreferences
 
 class KeyboardViewModel(application: Application) : AndroidViewModel(application), TextToSpeech.OnInitListener {
 
     private val repository: MemeRepository
     private var tts: TextToSpeech? = null
     private var isTtsInitialized = false
-
-    // 👉 YEH NAYA BRIDGE HAI: Keyboard mein type karne ke liye
-    var onCommitText: ((String) -> Unit)? = null
+    private val sharedPrefs = application.getSharedPreferences("desi_meme_prefs", Context.MODE_PRIVATE)
 
     // Input text in the meme message board
     private val _typedText = MutableStateFlow("")
     val typedText: StateFlow<String> = _typedText.asStateFlow()
+
+    // Interactive QWERTY Keyboard Sim State
+    private val _keyboardShiftState = MutableStateFlow(false)
+    val keyboardShiftState: StateFlow<Boolean> = _keyboardShiftState.asStateFlow()
+
+    private val _keyboardNumberMode = MutableStateFlow(false)
+    val keyboardNumberMode: StateFlow<Boolean> = _keyboardNumberMode.asStateFlow()
+
+    // AI Shayari / Dialogue Generator State
+    private val _isAiLoading = MutableStateFlow(false)
+    val isAiLoading: StateFlow<Boolean> = _isAiLoading.asStateFlow()
+
+    private val _generatedAiText = MutableStateFlow("")
+    val generatedAiText: StateFlow<String> = _generatedAiText.asStateFlow()
 
     // Configuration settings
     private val _insertMode = MutableStateFlow("DIALOGUE") // "DIALOGUE" or "EMOJI"
@@ -64,6 +87,11 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
         val database = AppDatabase.getDatabase(application)
         repository = MemeRepository(database.memeDao())
         
+        _insertMode.value = sharedPrefs.getString("insert_mode", "DIALOGUE") ?: "DIALOGUE"
+        _vibrationStrengthMultiplier.value = sharedPrefs.getFloat("vibration_strength", 1.0f)
+        _speechRate.value = sharedPrefs.getFloat("speech_rate", 1.0f)
+        _speechPitch.value = sharedPrefs.getFloat("speech_pitch", 1.0f)
+
         // Initialize Database with prepopulated defaults if empty
         viewModelScope.launch {
             repository.checkAndPrepopulate()
@@ -116,6 +144,7 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
 
     fun updateSpeechRate(rate: Float) {
         _speechRate.value = rate
+        sharedPrefs.edit().putFloat("speech_rate", rate).apply()
         if (isTtsInitialized) {
             tts?.setSpeechRate(rate)
         }
@@ -123,6 +152,7 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
 
     fun updateSpeechPitch(pitch: Float) {
         _speechPitch.value = pitch
+        sharedPrefs.edit().putFloat("speech_pitch", pitch).apply()
         if (isTtsInitialized) {
             tts?.setPitch(pitch)
         }
@@ -142,10 +172,12 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
 
     fun setInsertMode(mode: String) {
         _insertMode.value = mode
+        sharedPrefs.edit().putString("insert_mode", mode).apply()
     }
 
     fun setVibrationStrength(multiplier: Float) {
         _vibrationStrengthMultiplier.value = multiplier
+        sharedPrefs.edit().putFloat("vibration_strength", multiplier).apply()
     }
 
     // Primary click action on the custom keyboard
@@ -163,9 +195,6 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
             "${item.emoji} "
         }
         _typedText.value = _typedText.value + textToInsert
-
-        // 👉 YEH NAYA CODE HAI: Direct chat box mein type karne ke liye
-        onCommitText?.invoke(textToInsert)
 
         // Fire a visual dialogue overlay/popup
         _activeDialogueEvent.value = item
@@ -203,27 +232,37 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
         val amplitudes: IntArray?
 
         when (mood) {
+            "LIGHT" -> {
+                timings = longArrayOf(0, 15)
+                amplitudes = intArrayOf(0, 80)
+            }
             "FUNNY" -> {
+                // Bouncy energetic bursts
                 timings = longArrayOf(0, (60 * multiplier).toLong(), 40, (60 * multiplier).toLong(), 40, (80 * multiplier).toLong())
                 amplitudes = intArrayOf(0, 150, 0, 200, 0, 255)
             }
             "SWAG" -> {
+                // Heavy, steady pulses
                 timings = longArrayOf(0, (180 * multiplier).toLong(), 100, (180 * multiplier).toLong())
                 amplitudes = intArrayOf(0, 255, 0, 255)
             }
             "SAD" -> {
+                // Fading long wave
                 timings = longArrayOf(0, (400 * multiplier).toLong())
                 amplitudes = intArrayOf(0, 100)
             }
             "SHOCK" -> {
+                // High frequency double kick
                 timings = longArrayOf(0, (120 * multiplier).toLong(), 80, (250 * multiplier).toLong())
                 amplitudes = intArrayOf(0, 255, 0, 255)
             }
             "LOVE" -> {
+                // Heartbeat repeat
                 timings = longArrayOf(0, (80 * multiplier).toLong(), 80, (80 * multiplier).toLong(), 300, (80 * multiplier).toLong(), 80, (80 * multiplier).toLong())
                 amplitudes = intArrayOf(0, 100, 0, 120, 0, 100, 0, 120)
             }
             "ANGRY" -> {
+                // Harsh high power rumble
                 timings = longArrayOf(0, (350 * multiplier).toLong(), 40, (350 * multiplier).toLong())
                 amplitudes = intArrayOf(0, 255, 0, 255)
             }
@@ -303,6 +342,131 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
 
     fun clearText() {
         _typedText.value = ""
+    }
+
+    // --- Simulated Soft Keyboard Actions ---
+    fun onKeyTyped(char: String) {
+        val letter = if (_keyboardShiftState.value) char.uppercase() else char.lowercase()
+        _typedText.value = _typedText.value + letter
+        
+        // Single shift auto-revert
+        if (_keyboardShiftState.value) {
+            _keyboardShiftState.value = false
+        }
+        triggerVibration("LIGHT")
+    }
+
+    fun onBackspacePressed() {
+        val current = _typedText.value
+        if (current.isNotEmpty()) {
+            _typedText.value = current.dropLast(1)
+        }
+        triggerVibration("LIGHT")
+    }
+
+    fun onSpacePressed() {
+        _typedText.value = _typedText.value + " "
+        triggerVibration("LIGHT")
+    }
+
+    fun onShiftToggle() {
+        _keyboardShiftState.value = !_keyboardShiftState.value
+        triggerVibration("LIGHT")
+    }
+
+    fun onNumberModeToggle() {
+        _keyboardNumberMode.value = !_keyboardNumberMode.value
+        triggerVibration("LIGHT")
+    }
+
+    // --- Gemini AI Shayari & Dialogue Generator ---
+    fun generateAiDialogue(category: String, topic: String) {
+        viewModelScope.launch {
+            _isAiLoading.value = true
+            _generatedAiText.value = ""
+            
+            val prompt = "Write a highly creative, catchy, and authentic single-line Desi Hinglish (Roman Hindi) meme dialogue or Shayari. " +
+                         "The category is '$category' and the topic or keyword is '$topic'. " +
+                         "Keep it short, direct, highly expressive, and punchy (1-2 lines maximum), using iconic slang/humor. " +
+                         "Do not include any English translations, explanations, or meta-commentary. Return ONLY the Hindi/Hinglish line itself."
+                         
+            val result = callGeminiApi(prompt)
+            _generatedAiText.value = result
+            _isAiLoading.value = false
+            
+            // Speak generated line
+            if (result.isNotEmpty() && !result.startsWith("Error")) {
+                speakDialogue(result)
+            }
+        }
+    }
+
+    fun useGeneratedAiText() {
+        val text = _generatedAiText.value
+        if (text.isNotEmpty() && !text.startsWith("Error")) {
+            _typedText.value = _typedText.value + text + " "
+            _generatedAiText.value = ""
+        }
+    }
+
+    private suspend fun callGeminiApi(prompt: String): String = withContext(Dispatchers.IO) {
+        val apiKey = BuildConfig.GEMINI_API_KEY
+        if (apiKey.isEmpty() || apiKey == "MY_GEMINI_API_KEY") {
+            return@withContext "Please enter your Gemini API Key in AI Studio Secrets panel!"
+        }
+        
+        val client = OkHttpClient.Builder()
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+            
+        val jsonBody = JSONObject().apply {
+            put("contents", JSONArray().apply {
+                put(JSONObject().apply {
+                    put("parts", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("text", prompt)
+                        })
+                    })
+                })
+            })
+        }
+        
+        val mediaType = "application/json; charset=utf-8".toMediaType()
+        val requestBody = jsonBody.toString().toRequestBody(mediaType)
+        
+        val request = Request.Builder()
+            .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=$apiKey")
+            .post(requestBody)
+            .build()
+            
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    return@withContext "Error code: ${response.code}. Check if your Gemini key is correct."
+                }
+                val responseBody = response.body?.string() ?: return@withContext "Error: Empty response"
+                val jsonResponse = JSONObject(responseBody)
+                val candidates = jsonResponse.optJSONArray("candidates")
+                if (candidates != null && candidates.length() > 0) {
+                    val firstCandidate = candidates.getJSONObject(0)
+                    val content = firstCandidate.optJSONObject("content")
+                    if (content != null) {
+                        val parts = content.optJSONArray("parts")
+                        if (parts != null && parts.length() > 0) {
+                            return@withContext parts.getJSONObject(0).optString("text", "No text generated").trim()
+                        }
+                    }
+                }
+                "No creative response received."
+            }
+        } catch (e: Exception) {
+            "Error: ${e.message}"
+        }
+    }
+
+    fun playTtsForText(text: String) {
+        speakDialogue(text)
     }
 
     override fun onCleared() {
