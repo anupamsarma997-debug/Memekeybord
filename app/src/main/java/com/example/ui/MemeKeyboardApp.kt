@@ -75,6 +75,9 @@ fun MemeKeyboardApp(
 
     var showCreatorSheet by remember { mutableStateOf(false) }
     var showTunerPanel by remember { mutableStateOf(false) }
+    var showCanvasEditor by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
+    var editingMemeItem by remember { mutableStateOf<MemeDialogue?>(null) }
 
     // Categories definition
     val categories = listOf(
@@ -109,10 +112,15 @@ fun MemeKeyboardApp(
                 .padding(bottom = 16.dp)
         ) {
             // Header Hero Area
-            HeaderHeroSection(onResetDefaults = {
-                viewModel.resetToDefaults()
-                Toast.makeText(context, "Meme Keyboard reset to default dialogues!", Toast.LENGTH_SHORT).show()
-            })
+            HeaderHeroSection(
+                onResetDefaults = {
+                    viewModel.resetToDefaults()
+                    Toast.makeText(context, "Meme Keyboard reset to default dialogues!", Toast.LENGTH_SHORT).show()
+                },
+                onOpenSettings = {
+                    showSettingsDialog = true
+                }
+            )
 
             // Onboarding System Keyboard Activation Banner
             SystemKeyboardActivationCard()
@@ -135,6 +143,12 @@ fun MemeKeyboardApp(
                     } else {
                         Toast.makeText(context, "Nothing to share! Type some dialogues.", Toast.LENGTH_SHORT).show()
                     }
+                },
+                onOpenCanvasStudio = {
+                    editingMemeItem = if (typedText.isNotBlank()) {
+                        MemeDialogue(emoji = "🔥", dialogue = typedText, category = "😂 Hasna", mood = "FUNNY")
+                    } else null
+                    showCanvasEditor = true
                 }
             )
 
@@ -142,7 +156,13 @@ fun MemeKeyboardApp(
             QuickActionsRow(
                 showTuner = showTunerPanel,
                 onToggleTuner = { showTunerPanel = !showTunerPanel },
-                onOpenCreator = { showCreatorSheet = true }
+                onOpenCreator = { showCreatorSheet = true },
+                onOpenCanvasStudio = {
+                    editingMemeItem = if (typedText.isNotBlank()) {
+                        MemeDialogue(emoji = "🔥", dialogue = typedText, category = "😂 Hasna", mood = "FUNNY")
+                    } else null
+                    showCanvasEditor = true
+                }
             )
 
             // Tuning Sliders Panel
@@ -196,6 +216,22 @@ fun MemeKeyboardApp(
                     showCreatorSheet = false
                     Toast.makeText(context, "Meme dialogue added! 🚀", Toast.LENGTH_SHORT).show()
                 }
+            )
+        }
+
+        // In-App Meme Canvas Editor & Share Preview Dialog
+        if (showCanvasEditor) {
+            MemeCanvasEditorDialog(
+                initialMeme = editingMemeItem,
+                onDismiss = { showCanvasEditor = false }
+            )
+        }
+
+        // DataStore Settings & System Keyboard Dialog
+        if (showSettingsDialog) {
+            KeyboardSettingsDialog(
+                viewModel = viewModel,
+                onDismiss = { showSettingsDialog = false }
             )
         }
     }
@@ -271,7 +307,10 @@ fun SystemKeyboardActivationCard(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun HeaderHeroSection(onResetDefaults: () -> Unit) {
+fun HeaderHeroSection(
+    onResetDefaults: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
     val infiniteTransition = rememberInfiniteTransition()
     val angle by infiniteTransition.animateFloat(
         initialValue = -5f,
@@ -331,18 +370,34 @@ fun HeaderHeroSection(onResetDefaults: () -> Unit) {
                 )
             }
 
-            IconButton(
-                onClick = onResetDefaults,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(DesiCharcoal.copy(alpha = 0.5f))
-                    .border(1.dp, Color.Gray.copy(alpha = 0.3f), CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Reset Defaults",
-                    tint = DesiOrange
-                )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                IconButton(
+                    onClick = onOpenSettings,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(DesiPurple.copy(alpha = 0.2f))
+                        .border(1.dp, DesiPurple, CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "DataStore Settings",
+                        tint = DesiYellow
+                    )
+                }
+
+                IconButton(
+                    onClick = onResetDefaults,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(DesiCharcoal.copy(alpha = 0.5f))
+                        .border(1.dp, Color.Gray.copy(alpha = 0.3f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "Reset Defaults",
+                        tint = DesiOrange
+                    )
+                }
             }
         }
     }
@@ -355,7 +410,8 @@ fun MessageBoardCard(
     onTextChange: (String) -> Unit,
     onCopy: () -> Unit,
     onClear: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    onOpenCanvasStudio: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -437,7 +493,7 @@ fun MessageBoardCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Button(
                     onClick = onCopy,
@@ -452,10 +508,29 @@ fun MessageBoardCard(
                     Icon(
                         imageVector = Icons.Default.ContentCopy,
                         contentDescription = "Copy",
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(14.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Copy", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Copy", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+
+                Button(
+                    onClick = onOpenCanvasStudio,
+                    modifier = Modifier
+                        .weight(1.3f)
+                        .height(38.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = DesiYellow),
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Brush,
+                        contentDescription = "Canvas Studio",
+                        tint = DesiCharcoal,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Meme Canvas 🎨", fontSize = 11.sp, fontWeight = FontWeight.Black, color = DesiCharcoal)
                 }
 
                 Button(
@@ -470,10 +545,10 @@ fun MessageBoardCard(
                     Icon(
                         imageVector = Icons.Default.Share,
                         contentDescription = "Share",
-                        modifier = Modifier.size(16.dp)
+                        modifier = Modifier.size(14.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Share", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Share", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -484,7 +559,8 @@ fun MessageBoardCard(
 fun QuickActionsRow(
     showTuner: Boolean,
     onToggleTuner: () -> Unit,
-    onOpenCreator: () -> Unit
+    onOpenCreator: () -> Unit,
+    onOpenCanvasStudio: () -> Unit
 ) {
     Row(
         modifier = Modifier
@@ -506,40 +582,54 @@ fun QuickActionsRow(
                 imageVector = Icons.Default.Tune,
                 contentDescription = "Tuning Board",
                 tint = if (showTuner) DesiPurple else Color.Gray,
-                modifier = Modifier.size(18.dp)
+                modifier = Modifier.size(16.dp)
             )
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(4.dp))
             Text(
-                text = "Vibe & Speech Tuner",
-                fontSize = 12.sp,
+                text = "Tuner",
+                fontSize = 11.sp,
                 color = if (showTuner) DesiWhite else Color.Gray,
                 fontWeight = FontWeight.Bold
             )
-            Icon(
-                imageVector = if (showTuner) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                contentDescription = "Toggle",
-                tint = Color.Gray,
-                modifier = Modifier.size(18.dp)
-            )
         }
 
-        // Custom Creator Dialog Trigger Button
-        Button(
-            onClick = onOpenCreator,
-            colors = ButtonDefaults.buttonColors(containerColor = DesiCharcoal),
-            border = BorderStroke(1.5.dp, DesiYellow),
-            shape = RoundedCornerShape(8.dp),
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-            modifier = Modifier.height(30.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Add,
-                contentDescription = "Add custom dialogue",
-                tint = DesiYellow,
-                modifier = Modifier.size(14.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text("Add Dialogue", fontSize = 11.sp, color = DesiYellow, fontWeight = FontWeight.Bold)
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            // Open Canvas Studio Button
+            Button(
+                onClick = onOpenCanvasStudio,
+                colors = ButtonDefaults.buttonColors(containerColor = DesiOrange),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                modifier = Modifier.height(30.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Brush,
+                    contentDescription = "Meme Canvas Studio",
+                    tint = Color.White,
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Canvas Studio 🎨", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+            }
+
+            // Custom Creator Dialog Trigger Button
+            Button(
+                onClick = onOpenCreator,
+                colors = ButtonDefaults.buttonColors(containerColor = DesiCharcoal),
+                border = BorderStroke(1.5.dp, DesiYellow),
+                shape = RoundedCornerShape(8.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                modifier = Modifier.height(30.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = "Add custom dialogue",
+                    tint = DesiYellow,
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("+ Key", fontSize = 10.sp, color = DesiYellow, fontWeight = FontWeight.Bold)
+            }
         }
     }
 }
@@ -2148,13 +2238,13 @@ fun TrendingSection(
         ) {
             Column {
                 Text(
-                    text = "🔥 TODAY'S DESI TRENDS",
+                    text = "🔥 TODAY'S 10 VIRAL DESI MEMES (AI)",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Black,
                     color = DesiOrange
                 )
                 Text(
-                    text = "Daily updated with Search Grounding",
+                    text = "Daily 10 viral Indian memes generated by AI",
                     fontSize = 9.sp,
                     color = Color.Gray
                 )

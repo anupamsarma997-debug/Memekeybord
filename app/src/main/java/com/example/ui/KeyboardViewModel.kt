@@ -59,7 +59,45 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
     private val _generatedAiText = MutableStateFlow("")
     val generatedAiText: StateFlow<String> = _generatedAiText.asStateFlow()
 
-    // Configuration settings
+    // Configuration settings & DataStore Preferences
+    private val keyboardDataStore = com.example.data.KeyboardDataStore(application)
+
+    val vibrationEnabled: StateFlow<Boolean> = keyboardDataStore.vibrationEnabledFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
+    )
+
+    val audioPlaybackEnabled: StateFlow<Boolean> = keyboardDataStore.audioPlaybackEnabledFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
+    )
+
+    val darkThemeEnabled: StateFlow<Boolean> = keyboardDataStore.darkThemeEnabledFlow.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = true
+    )
+
+    fun toggleVibration(enabled: Boolean) {
+        viewModelScope.launch {
+            keyboardDataStore.setVibrationEnabled(enabled)
+        }
+    }
+
+    fun toggleAudioPlayback(enabled: Boolean) {
+        viewModelScope.launch {
+            keyboardDataStore.setAudioPlaybackEnabled(enabled)
+        }
+    }
+
+    fun toggleDarkTheme(enabled: Boolean) {
+        viewModelScope.launch {
+            keyboardDataStore.setDarkThemeEnabled(enabled)
+        }
+    }
+
     private val _insertMode = MutableStateFlow("DIALOGUE") // "DIALOGUE" or "EMOJI"
     val insertMode: StateFlow<String> = _insertMode.asStateFlow()
 
@@ -206,6 +244,7 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun speakDialogue(text: String) {
+        if (!audioPlaybackEnabled.value) return
         if (isTtsInitialized && tts != null) {
             // Clean up text for better Hindi/Hinglish TTS output
             val cleanedText = text
@@ -225,6 +264,7 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun triggerVibration(mood: String) {
+        if (!vibrationEnabled.value) return
         val vibrator = getApplication<Application>().getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
         if (vibrator == null || !vibrator.hasVibrator()) return
 
@@ -481,9 +521,9 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             _isTrendingLoading.value = true
             try {
-                val prompt = "Find and summarize the top 6 absolute most popular viral Desi/Hindi/Hinglish meme dialogues, social media trends, movie dialogue catchphrases, or slang phrases currently trending in India right now in 2026. " +
+                val prompt = "Find and summarize the top 10 absolute most popular viral Desi/Hindi/Hinglish meme dialogues, social media trends, movie dialogue catchphrases, viral reels, or slang phrases currently trending in India right now in 2026. " +
                              "For each trending meme, specify a suitable single emoji, the dialogue text (in Hinglish, i.e., Roman script, like 'Moye Moye' or 'Just looking like a wow'), a category (choose exactly from: '😂 Hasna', '😎 Swag', '😭 Dukh', '😱 Shock', '❤️ Pyaar', '😡 Gussa', '🤝 Dosti'), and the mood (choose exactly from: 'FUNNY', 'SWAG', 'SAD', 'SHOCK', 'LOVE', 'ANGRY'). " +
-                             "Format the output strictly as a JSON array of objects. Do not include any other text, markdown blocks, or translations. " +
+                             "Format the output strictly as a JSON array of 10 objects. Do not include any other text, markdown blocks, or translations. " +
                              "Example: [ { \"emoji\": \"😭\", \"dialogue\": \"Yeh dukh kaahe khatam nahi hota be\", \"category\": \"😭 Dukh\", \"mood\": \"SAD\" } ]"
                 
                 val result = callGeminiApiWithSearch(prompt)
@@ -546,12 +586,20 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
             MemeDialogue(emoji = "🥺", dialogue = "Sahi pakde hain, par dil se bura lagta hai bhai!", category = "😭 Dukh", mood = "SAD"),
             MemeDialogue(emoji = "🗺️", dialogue = "Bhupendra Jogi! US mein kahan kahan gaye hain aap?", category = "😎 Swag", mood = "SWAG"),
             MemeDialogue(emoji = "🦁", dialogue = "Sher ko kaboo karne ke liye jigar chahiye, dimaag nahi!", category = "😎 Swag", mood = "SWAG"),
-            MemeDialogue(emoji = "💔", dialogue = "Toba toba, saara mood kharab kar diya!", category = "😡 Gussa", mood = "ANGRY")
+            MemeDialogue(emoji = "💔", dialogue = "Toba toba, saara mood kharab kar diya!", category = "😡 Gussa", mood = "ANGRY"),
+            MemeDialogue(emoji = "🚀", dialogue = "Lala, aag laga di aag! Ab toh viral trending hai!", category = "😎 Swag", mood = "SWAG"),
+            MemeDialogue(emoji = "👀", dialogue = "Control Uday Control! Bhot hard bhot hard!", category = "😂 Hasna", mood = "FUNNY"),
+            MemeDialogue(emoji = "🔥", dialogue = "Kaha se aate hain yeh log, aur kidhar jaate hain?", category = "😱 Shock", mood = "SHOCK"),
+            MemeDialogue(emoji = "🤣", dialogue = "Chhoti bacchi ho kya? Samajh nahi aata!", category = "😂 Hasna", mood = "FUNNY"),
+            MemeDialogue(emoji = "👑", dialogue = "Jhukega nahi saala! King size entry!", category = "😎 Swag", mood = "SWAG"),
+            MemeDialogue(emoji = "🤑", dialogue = "25 din mein paisa double! Scheme mast hai!", category = "😂 Hasna", mood = "FUNNY"),
+            MemeDialogue(emoji = "⚡", dialogue = "Aapne ghabrana nahi hai, sab sorted hai boss!", category = "😎 Swag", mood = "SWAG"),
+            MemeDialogue(emoji = "😴", dialogue = "Aarram se bhai, itni jaldi kis baat ki hai?", category = "🤝 Dosti", mood = "LOVE")
         )
         
         val startIndex = day % pool.size
         val resultList = mutableListOf<MemeDialogue>()
-        for (i in 0 until 6) {
+        for (i in 0 until 10) {
             val index = (startIndex + i) % pool.size
             resultList.add(pool[index])
         }

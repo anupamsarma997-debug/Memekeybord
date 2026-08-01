@@ -13,12 +13,22 @@ import com.example.ui.KeyboardViewModel
 import com.example.ui.MemeKeyboardApp
 import com.example.ui.theme.MyApplicationTheme
 
+import com.example.worker.DailyMemeTrendWorker
+
 class MainActivity : ComponentActivity() {
   private val viewModel: KeyboardViewModel by viewModels()
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     enableEdgeToEdge()
+
+    // Schedule background worker for daily viral Gemini meme trend generation
+    try {
+      DailyMemeTrendWorker.schedule(applicationContext)
+    } catch (e: Exception) {
+      e.printStackTrace()
+    }
+
     setContent {
       MyApplicationTheme {
         Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
